@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Multiplayer Quiz (Works Anywhere)</title>
+    <!-- Include PeerJS library -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #46178f; color: white; text-align: center; margin: 0; padding: 20px; }
+        .hidden { display: none; }
+        .btn { padding: 15px 30px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; margin: 10px; font-weight: bold; transition: 0.2s; }
+        .btn:hover { opacity: 0.9; transform: scale(1.02); }
+        .btn-add { background: #ffd000; color: #333; }
+        .btn-host { background: #26890c; color: white; }
+        .btn-join { background: #1368ce; color: white; }
+        .btn-remove { background: #e21b3c; color: white; padding: 5px 10px; font-size: 14px; }
+        
+        #question-form-container { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px; max-width: 600px; margin: 20px auto; text-align: left; }
+        .question-row { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
+        .question-row input, .question-row select { width: 100%; padding: 8px; margin: 5px 0; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        
+        .answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 20px; max-width: 500px; margin: 0 auto; }
+        .red { background: #e21b3c; color: white; }
+        .blue { background: #1368ce; color: white; }
+        .yellow { background: #d89e00; color: white; }
+        .green { background: #26890c; color: white; }
+        
+        #player-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; list-style: none; padding: 0; font-size: 22px; }
+        #player-list li { background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        input[type="text"] { padding: 12px; font-size: 16px; border-radius: 6px; border: none; margin: 5px; }
+    </style>
+</head>
+<body>
+
+    <!-- ROLE SELECTION AND QUESTION CREATION SCREEN -->
+    <div id="setup-screen">
+        <h1>P2P Multiplayer Quiz Game</h1>
+        
+        <div id="question-form-container">
+            <h3>1. Create Your Questions</h3>
+            <div id="questions-list">
+                <div class="question-row">
+                    <input type="text" class="q-text" placeholder="Question 1 (e.g., What is the capital of England?)" required>
+                    <input type="text" class="opt-a" placeholder="Option A (Red / ▲)" required>
+                    <input type="text" class="opt-b" placeholder="Option B (Blue / ◆)" required>
+                    <input type="text" class="opt-c" placeholder="Option C (Yellow / ●)" required>
+                    <input type="text" class="opt-d" placeholder="Option D (Green / ■)" required>
+                    <select class="q-correct">
+                        <option value="A">Correct: Option A</option>
+                        <option value="B">Correct: Option B</option>
+                        <option value="C">Correct: Option C</option>
+                        <option value="D">Correct: Option D</option>
+                    </select>
+                </div>
+            </div>
+            <button type="button" class="btn btn-add" onclick="addQuestionRow()">➕ Add Another Question</button>
+        </div>
+
+        <button class="btn btn-host" onclick="startAsHost()">2. Host a Game with These Questions</button>
+        
+        <hr style="width: 50%; margin: 30px auto; opacity: 0.3;">
+        
+        <h3>Or Join an Existing Game</h3>
+        <input type="text" id="player-nickname" placeholder="Enter Your Nickname"><br>
+        <input type="text" id="game-pin" placeholder="Enter Game PIN"><br>
+        <button class="btn btn-join" onclick="startAsPlayer()">Join Game Room</button>
+    </div>
+
+    <!-- HOST VIEW -->
+    <div id="host-view" class="hidden">
+        <h2>Game PIN (Share this with players):</h2>
+        <h1 id="display-pin" style="color: #ffdd00; font-size: 42px; letter-spacing: 2px; background: rgba(0,0,0,0.3); display: inline-block; padding: 10px 30px; border-radius: 10px;">Generating...</h1>
+        
+        <div id="host-lobby">
+            <h3>Players In Lobby:</h3>
+            <ul id="player-list"></ul>
+            <button class="btn btn-host" id="start-game-btn" onclick="sendStartGame()" disabled style="background: #26890c; font-size: 24px;">Start Match</button>
+        </div>
+        
+        <div id="host-game" class="hidden">
+            <h1 id="question-text" style="font-size: 36px; margin-top: 40px;">Question appears here</h1>
+            <h3 style="background: rgba(0,0,0,0.2); padding: 15px; display: inline-block; border-radius: 8px;">Answers Received: <span id="submission-count" style="color: #ffd000; font-size: 24px;">0</span></h3>
+        </div>
+    </div>
+
+    <!-- PLAYER VIEW -->
+    <div id="player-view" class="hidden">
+        <h2 id="player-status">Connecting to Host...</h2>
+        <div id="player-controller" class="hidden">
+            <h3 style="margin-bottom: 20px;">Tap your answer!</h3>
+            <div class="answers-grid">
+                <button class="btn red" onclick="submitAnswer('A')">▲</button>
+                <button class="btn blue" onclick="submitAnswer('B')">◆</button>
+                <button class="btn yellow" onclick="submitAnswer('C')">●</button>
+                <button class="btn green" onclick="submitAnswer('D')">■</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        function addQuestionRow() {
+            const list = document.getElementById('questions-list');
+            const rowCount = list.getElementsByClassName('question-row').length + 1;
+            const div = document.createElement('div');
+            div.className = 'question-row';
+            div.innerHTML = `
+                <input type="text" class="q-text" placeholder="Question ${rowCount}" required>
+                <input type="text" class="opt-a" placeholder="Option A (Red / ▲)" required>
+                <input type="text" class="opt-b" placeholder="Option B (Blue / ◆)" required>
+                <input type="text" class="opt-c" placeholder="Option C (Yellow / ●)" required>
+                <input type="text" class="opt-d" placeholder="Option D (Green / ■)" required>
+                <select class="q-correct">
+                    <option value="A">Correct: Option A</option>
+                    <option value="B">Correct: Option B</option>
+                    <option value="C">Correct: Option C</option>
+                    <option value="D">Correct: Option D</option>
+                </select>
+                <button type="button" class="btn btn-remove" onclick="this.parentElement.remove()" style="position: absolute; top: 10px; right: 10px;">X</button>
+            `;
+            list.appendChild(div);
+        }
+    </script>
+</body>
+</html>
